@@ -2,13 +2,22 @@
   "name": "rune",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "test": "tsc && node index.js"
+    "test": "tsc && node dist/index.js",
+    "build": "tsc"
   },
-  "author": "",
+  "author": "acernus18",
   "license": "ISC",
   "devDependencies": {
     "typescript": "^5.8.3"
-  }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ]
 }

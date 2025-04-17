@@ -11,22 +11,24 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 var Rune;
 (function (Rune) {
     class Exception extends Error {
-        constructor(code, name, message) {
+        constructor(code, message) {
             super(message);
             this._code = code;
-            this._name = name;
         }
         get code() {
             return this._code;
         }
-        get name() {
-            return this._name;
-        }
         toString() {
-            return `[${this._name}-${this._code}]: ${this.message}`;
+            return `[${this._code}]: ${this.message}`;
         }
     }
     Rune.Exception = Exception;
+    class Exceptions {
+    }
+    Exceptions.SystemError = new Exception(-1, "SystemError");
+    Exceptions.NetworkError = new Exception(-2, "NetworkError");
+    Exceptions.NotLogin = new Exception(100000, "NotLogin");
+    Rune.Exceptions = Exceptions;
     class RequestContext {
         constructor(sn, sid, aid, cmd, data) {
             this.aid = aid;
@@ -36,7 +38,6 @@ var Rune;
             this.sn = sn;
         }
     }
-    Rune.RequestContext = RequestContext;
     class ResponseContext {
         constructor(sn, code, message, data) {
             this.code = code;
@@ -45,19 +46,18 @@ var Rune;
             this.sn = sn;
         }
         static success(sn, data) {
-            return new Rune.ResponseContext(sn, 0, "SUC", data !== null && data !== void 0 ? data : null);
+            return new ResponseContext(sn, 0, "SUC", data !== null && data !== void 0 ? data : null);
         }
         static exception(sn, err) {
-            return new Rune.ResponseContext(sn, err.code, err.toString(), null);
+            return new ResponseContext(sn, err.code, err.toString(), null);
         }
         static systemError(sn) {
-            return new Rune.ResponseContext(sn, -1, "[SystemErr-(-1)]: system error.", null);
+            return new ResponseContext(sn, -1, "[SystemErr-(-1)]: system error.", null);
         }
     }
-    Rune.ResponseContext = ResponseContext;
     class ServicesRouter {
-        constructor(sessionProvider) {
-            this.sessionProvider = sessionProvider;
+        constructor(sessionHandler) {
+            this.sessionHandler = sessionHandler;
             this.serviceProvider = new Map();
         }
         addService(id, cmd, service) {
@@ -70,7 +70,7 @@ var Rune;
         }
         reply(req) {
             return __awaiter(this, void 0, void 0, function* () {
-                const [session, err] = yield this.sessionProvider(req.sid);
+                const [session, err] = yield this.sessionHandler.get(req.sid);
                 if (err !== null) {
                     return ResponseContext.exception(req.sn, err);
                 }
@@ -94,11 +94,40 @@ var Rune;
         }
     }
     Rune.ServicesRouter = ServicesRouter;
+    function request(url, aid, cmd, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const sn = "id" + "-" + (new Date().getTime()).toString(36) + "-" + Math.random().toString(36).substring(2);
+            const sid = sessionStorage.getItem("_rune_session_id");
+            if (sid === null) {
+                return [null, Exceptions.NotLogin];
+            }
+            const context = new RequestContext(sn, sid, aid, cmd, data);
+            try {
+                const response = yield fetch(url, { method: "POST", body: JSON.stringify(context) });
+                if (!response.ok) {
+                    return [null, Exceptions.NetworkError];
+                }
+                const result = (yield response.json());
+                if (result.sn !== sn) {
+                    return [null, Exceptions.SystemError];
+                }
+                if (result.code !== 0) {
+                    return [null, new Exception(result.code, result.message)];
+                }
+                return [result.data, null];
+            }
+            catch (e) {
+                return [null, Exceptions.SystemError];
+            }
+        });
+    }
+    Rune.request = request;
 })(Rune || (Rune = {}));
-const handler = new Rune.ServicesRouter(() => new Promise(resolve => resolve([1, null])));
-handler.addService("1", "1", (number, any) => {
-    return new Promise(resolve => resolve([1, null]));
-});
+// const handler = new Rune.ServicesRouter<number>(() => new Promise<[number, null]>(resolve => resolve([1, null])));
+//
+// handler.addService("1", "1", (number, any) => {
+//     return new Promise(resolve => resolve([1, null]));
+// });
 // function Handler(aid: string, cmd: string) {
 //     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
 //         console.log(`[${propertyKey}] ${descriptor}`);
@@ -109,9 +138,9 @@ handler.addService("1", "1", (number, any) => {
 // function service(session: number, req: any) {
 //     return new Promise(resolve => resolve([1, null]));
 // }
-(() => __awaiter(void 0, void 0, void 0, function* () {
-    const r = yield handler.reply({
-        sn: "1", cmd: "1", aid: "1", data: null, sid: "1"
-    });
-    console.log(r);
-}))();
+// (async () => {
+//     const r = await handler.reply({
+//         sn: "1", cmd: "1", aid: "1", data: null, sid: "1"
+//     });
+//     console.log(r);
+// })();

@@ -1,25 +1,25 @@
 namespace Rune {
     export class Exception extends Error {
         private readonly _code: number;
-        private readonly _name: string;
 
-        constructor(code: number, name: string, message: string) {
+        constructor(code: number, message: string) {
             super(message);
             this._code = code;
-            this._name = name;
         }
 
         get code(): number {
             return this._code;
         }
 
-        get name(): string {
-            return this._name;
-        }
-
         toString(): string {
-            return `[${this._name}-${this._code}]: ${this.message}`;
+            return `[${this._code}]: ${this.message}`;
         }
+    }
+
+    export class Exceptions {
+        public static SystemError = new Exception(-1, "SystemError");
+        public static NetworkError = new Exception(-2, "NetworkError");
+        public static NotLogin = new Exception(100000, "NotLogin");
     }
 
     // export class Logger {
@@ -54,7 +54,7 @@ namespace Rune {
         data: any;
     }
 
-    export class RequestContext implements RequestProtocol {
+    class RequestContext implements RequestProtocol {
         public aid: string;
         public cmd: string;
         public data: any;
@@ -70,7 +70,7 @@ namespace Rune {
         }
     }
 
-    export class ResponseContext implements ResponseProtocol {
+    class ResponseContext implements ResponseProtocol {
         public code: number;
         public data: any;
         public message: string;
@@ -84,15 +84,15 @@ namespace Rune {
         }
 
         public static success(sn: string, data?: any): ResponseProtocol {
-            return new Rune.ResponseContext(sn, 0, "SUC", data ?? null);
+            return new ResponseContext(sn, 0, "SUC", data ?? null);
         }
 
         public static exception(sn: string, err: Exception): ResponseProtocol {
-            return new Rune.ResponseContext(sn, err.code, err.toString(), null);
+            return new ResponseContext(sn, err.code, err.toString(), null);
         }
 
         public static systemError(sn: string): ResponseProtocol {
-            return new Rune.ResponseContext(sn, -1, "[SystemErr-(-1)]: system error.", null);
+            return new ResponseContext(sn, -1, "[SystemErr-(-1)]: system error.", null);
         }
     }
 
@@ -100,12 +100,20 @@ namespace Rune {
     type AsyncResult<T> = Promise<Result<T>>;
     type Service<SESSION, RESULT> = (session: SESSION, request: RequestProtocol) => AsyncResult<RESULT>;
 
+    interface SessionHandler<S> {
+        get(sid: string): AsyncResult<S>;
+
+        set(sid: string, value: S, expire: number): AsyncResult<void>;
+
+        del(sid: string): AsyncResult<void>;
+    }
+
     export class ServicesRouter<SESSION> {
-        private readonly sessionProvider: (id: string) => AsyncResult<SESSION>;
+        private readonly sessionHandler: SessionHandler<SESSION>;
         private readonly serviceProvider: Map<string, Map<string, Service<SESSION, any>>>;
 
-        public constructor(sessionProvider: (id: string) => AsyncResult<SESSION>) {
-            this.sessionProvider = sessionProvider;
+        public constructor(sessionHandler: SessionHandler<SESSION>) {
+            this.sessionHandler = sessionHandler;
             this.serviceProvider = new Map<string, Map<string, Service<SESSION, any>>>();
         }
 
@@ -119,7 +127,7 @@ namespace Rune {
         }
 
         public async reply(req: RequestProtocol): Promise<ResponseProtocol> {
-            const [session, err] = await this.sessionProvider(req.sid);
+            const [session, err] = await this.sessionHandler.get(req.sid);
             if (err !== null) {
                 return ResponseContext.exception(req.sn, err);
             }
@@ -141,13 +149,38 @@ namespace Rune {
             return ResponseContext.success(req.sn, serviceResult);
         }
     }
+
+    export async function request<Req, Res>(url: string, aid: string, cmd: string, data: Req): AsyncResult<Res> {
+        const sn = "id" + "-" + (new Date().getTime()).toString(36) + "-" + Math.random().toString(36).substring(2);
+        const sid = sessionStorage.getItem("_rune_session_id");
+        if (sid === null) {
+            return [null, Exceptions.NotLogin];
+        }
+        const context = new RequestContext(sn, sid, aid, cmd, data);
+        try {
+            const response = await fetch(url, {method: "POST", body: JSON.stringify(context)});
+            if (!response.ok) {
+                return [null, Exceptions.NetworkError];
+            }
+            const result = (await response.json()) as ResponseProtocol;
+            if (result.sn !== sn) {
+                return [null, Exceptions.SystemError];
+            }
+            if (result.code !== 0) {
+                return [null, new Exception(result.code, result.message)];
+            }
+            return [result.data as Res, null];
+        } catch (e) {
+            return [null, Exceptions.SystemError];
+        }
+    }
 }
 
-const handler = new Rune.ServicesRouter<number>(() => new Promise<[number, null]>(resolve => resolve([1, null])));
-
-handler.addService("1", "1", (number, any) => {
-    return new Promise(resolve => resolve([1, null]));
-});
+// const handler = new Rune.ServicesRouter<number>(() => new Promise<[number, null]>(resolve => resolve([1, null])));
+//
+// handler.addService("1", "1", (number, any) => {
+//     return new Promise(resolve => resolve([1, null]));
+// });
 
 // function Handler(aid: string, cmd: string) {
 //     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
@@ -160,9 +193,9 @@ handler.addService("1", "1", (number, any) => {
 //     return new Promise(resolve => resolve([1, null]));
 // }
 
-(async () => {
-    const r = await handler.reply({
-        sn: "1", cmd: "1", aid: "1", data: null, sid: "1"
-    });
-    console.log(r);
-})();
+// (async () => {
+//     const r = await handler.reply({
+//         sn: "1", cmd: "1", aid: "1", data: null, sid: "1"
+//     });
+//     console.log(r);
+// })();
