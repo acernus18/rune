@@ -1,4 +1,4 @@
-declare namespace Rune {
+export declare namespace Rune {
     export class Exception extends Error {
         private readonly _code;
         constructor(code: number, message: string);

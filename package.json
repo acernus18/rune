@@ -1,6 +1,6 @@
 {
-  "name": "rune",
-  "version": "1.0.0",
+  "name": "acernus-rune",
+  "version": "0.0.2",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
