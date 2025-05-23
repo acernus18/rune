@@ -1,73 +1,104 @@
-import {Exception, Exceptions} from "@/exceptions";
-import {RequestProtocol, ResponseProtocol, SessionHandler} from "@/interfaces";
-import {RequestContext, ResponseContext} from "@/protocols";
-import {AsyncResult, Service} from "@/types";
-
 export namespace Rune {
-    export class ServicesRouter<SESSION> {
-        private readonly sessionHandler: SessionHandler<SESSION>;
-        private readonly serviceProvider: Map<string, Map<string, Service<SESSION, any>>>;
+    export interface SessionProtocol {
+        sn: string;
+        sid: string;
+        uid: string;
+        credentials: Set<string>;
+    }
 
-        public constructor(sessionHandler: SessionHandler<SESSION>) {
-            this.sessionHandler = sessionHandler;
-            this.serviceProvider = new Map<string, Map<string, Service<SESSION, any>>>();
+    export interface RequestProtocol {
+        sn: string;  // Serial Numbers
+        sid: string; // Session ID
+        aid: string; // App ID
+        cmd: string; // Cmd ID
+        data: any;
+    }
+
+    export interface RequestContext {
+        sn: string;
+        session: SessionProtocol;
+        request: RequestProtocol;
+    }
+
+    export interface ResponseProtocol {
+        sn: string;
+        code: number;
+        message: string;
+        data: any;
+    }
+
+    export class Exception extends Error {
+        public static createByResponse(response: ResponseProtocol): Exception {
+            return new Exception(response.sn, response.code, response.message);
         }
 
-        public addService(id: string, cmd: string, service: Service<SESSION, any>): void {
-            let appServices = this.serviceProvider.get(id);
-            if (!appServices) {
-                appServices = new Map<string, Service<SESSION, any>>();
-            }
-            appServices.set(cmd, service);
-            this.serviceProvider.set(id, appServices);
+        public readonly sn: string;
+
+        public readonly code: number;
+
+        constructor(sn: string, code: number, message: string) {
+            super(message);
+            this.sn = sn;
+            this.code = code;
         }
 
-        public async reply(req: RequestProtocol): Promise<ResponseProtocol> {
-            const [session, err] = await this.sessionHandler.get(req.sid);
-            if (err !== null) {
-                return ResponseContext.exception(req.sn, err);
-            }
-            if (session === null) {
-                return ResponseContext.systemError(req.sn);
-            }
-            const appServices = this.serviceProvider.get(req.aid);
-            if (!appServices) {
-                return ResponseContext.systemError(req.sn);
-            }
-            const service = appServices.get(req.cmd);
-            if (!service) {
-                return ResponseContext.systemError(req.sn);
-            }
-            const [serviceResult, serviceErr] = await service(session, req);
-            if (serviceErr !== null) {
-                return ResponseContext.exception(req.sn, serviceErr);
-            }
-            return ResponseContext.success(req.sn, serviceResult);
+        toString(): string {
+            return `[${this.code}]: ${this.sn} -> ${this.message}`;
+        }
+
+        toResponse(): ResponseProtocol {
+            return {
+                sn: this.sn,
+                code: this.code,
+                message: this.message,
+                data: null,
+            };
         }
     }
 
-    export async function request<Req, Res>(url: string, aid: string, cmd: string, data: Req): AsyncResult<Res> {
-        const sn = "id" + "-" + (new Date().getTime()).toString(36) + "-" + Math.random().toString(36).substring(2);
-        const sid = sessionStorage.getItem("_rune_session_id");
-        if (sid === null) {
-            return [null, Exceptions.NotLogin];
+    export type Result<T> = [T | null, Exception | null];
+
+    export type AsyncResult<T> = Promise<Result<T>>;
+
+    export type Service = (context: RequestContext) => AsyncResult<any>;
+
+    export class ServiceProvider {
+        private readonly services: Map<string, Service>;
+        private readonly sessionProvider: (sid: string) => AsyncResult<SessionProtocol>;
+
+        public constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>) {
+            this.services = new Map<string, Service>();
+            this.sessionProvider = sessionProvider;
         }
-        const context = new RequestContext(sn, sid, aid, cmd, data);
-        try {
-            const response = await fetch(url, {method: "POST", body: JSON.stringify(context)});
-            if (!response.ok) {
-                return [null, Exceptions.NetworkError];
+
+        public async proceed(req: RequestProtocol): Promise<ResponseProtocol> {
+            const [session, err] = await this.sessionProvider(req.sid);
+            if (err !== null) {
+                return err.toResponse();
             }
-            const result = (await response.json()) as ResponseProtocol;
-            if (result.sn !== sn) {
-                return [null, Exceptions.SystemError];
+            if (session === null) {
+                return new Exception(req.sn, -1, "SystemError").toResponse();
             }
-            if (result.code !== 0) {
-                return [null, new Exception(result.code, result.message)];
+            const service = this.services.get(`${req.aid}/${req.cmd}`);
+            if (!service) {
+                return new Exception(req.sn, -1, "SystemError").toResponse();
             }
-            return [result.data as Res, null];
-        } catch (e) {
-            return [null, Exceptions.SystemError];
+            const [serviceResult, serviceErr] = await service({
+                sn: req.sn, request: req, session: session
+            });
+            if (serviceErr !== null) {
+                return serviceErr.toResponse();
+            }
+            return {
+                sn: req.sn,
+                code: 0,
+                message: "SUC",
+                data: serviceResult,
+            };
         }
+    }
+
+    export function getSerialNumber(uid: string): string {
+        return `${uid}-${(new Date().getTime()).toString(36)}-${Math.random().toString(36).substring(2)}`;
     }
 }

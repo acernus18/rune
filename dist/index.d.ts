@@ -1,43 +1,44 @@
 export declare namespace Rune {
-    export class Exception extends Error {
-        private readonly _code;
-        constructor(code: number, message: string);
-        get code(): number;
-        toString(): string;
-    }
-    export class Exceptions {
-        static SystemError: Exception;
-        static NetworkError: Exception;
-        static NotLogin: Exception;
-    }
-    export interface RequestProtocol {
+    interface SessionProtocol {
         sn: string;
+        sid: string;
+        uid: string;
+        credentials: Set<string>;
+    }
+    interface RequestProtocol {
+        sn: string;
+        sid: string;
         aid: string;
         cmd: string;
-        sid: string;
         data: any;
     }
-    export interface ResponseProtocol {
+    interface RequestContext {
+        sn: string;
+        session: SessionProtocol;
+        request: RequestProtocol;
+    }
+    interface ResponseProtocol {
         sn: string;
         code: number;
         message: string;
         data: any;
     }
+    class Exception extends Error {
+        static createByResponse(response: ResponseProtocol): Exception;
+        readonly sn: string;
+        readonly code: number;
+        constructor(sn: string, code: number, message: string);
+        toString(): string;
+        toResponse(): ResponseProtocol;
+    }
     type Result<T> = [T | null, Exception | null];
     type AsyncResult<T> = Promise<Result<T>>;
-    type Service<SESSION, RESULT> = (session: SESSION, request: RequestProtocol) => AsyncResult<RESULT>;
-    interface SessionHandler<S> {
-        get(sid: string): AsyncResult<S>;
-        set(sid: string, value: S, expire: number): AsyncResult<void>;
-        del(sid: string): AsyncResult<void>;
+    type Service = (context: RequestContext) => AsyncResult<any>;
+    class ServiceProvider {
+        private readonly services;
+        private readonly sessionProvider;
+        constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>);
+        proceed(req: RequestProtocol): Promise<ResponseProtocol>;
     }
-    export class ServicesRouter<SESSION> {
-        private readonly sessionHandler;
-        private readonly serviceProvider;
-        constructor(sessionHandler: SessionHandler<SESSION>);
-        addService(id: string, cmd: string, service: Service<SESSION, any>): void;
-        reply(req: RequestProtocol): Promise<ResponseProtocol>;
-    }
-    export function request<Req, Res>(url: string, aid: string, cmd: string, data: Req): AsyncResult<Res>;
-    export {};
+    function getSerialNumber(uid: string): string;
 }
