@@ -71,6 +71,10 @@ export namespace Rune {
             this.sessionProvider = sessionProvider;
         }
 
+        public addService(aid: string, cmd: string, service: Service) {
+            this.services.set(`${aid}/${cmd}`, service);
+        }
+
         public async proceed(req: RequestProtocol): Promise<ResponseProtocol> {
             const [session, err] = await this.sessionProvider(req.sid);
             if (err !== null) {
