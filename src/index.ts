@@ -66,13 +66,9 @@ export namespace Rune {
         private readonly services: Map<string, Service>;
         private readonly sessionProvider: (sid: string) => AsyncResult<SessionProtocol>;
 
-        public constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>) {
-            this.services = new Map<string, Service>();
+        public constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>, services: Map<string, Service>) {
+            this.services = services;
             this.sessionProvider = sessionProvider;
-        }
-
-        public addService(aid: string, cmd: string, service: Service) {
-            this.services.set(`${aid}/${cmd}`, service);
         }
 
         public async proceed(req: RequestProtocol): Promise<ResponseProtocol> {
