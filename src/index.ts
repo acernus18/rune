@@ -16,7 +16,7 @@ export namespace Rune {
 
     export interface RequestContext {
         sn: string;
-        session: SessionProtocol;
+        session: SessionProtocol | null;
         request: RequestProtocol;
     }
 
@@ -66,8 +66,8 @@ export namespace Rune {
         private readonly services: Map<string, Service>;
         private readonly sessionProvider: (sid: string) => AsyncResult<SessionProtocol>;
 
-        public constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>, services: Map<string, Service>) {
-            this.services = services;
+        public constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>, services?: Map<string, Service>) {
+            this.services = services ?? new Map<string, Service>();
             this.sessionProvider = sessionProvider;
         }
 
@@ -75,9 +75,6 @@ export namespace Rune {
             const [session, err] = await this.sessionProvider(req.sid);
             if (err !== null) {
                 return err.toResponse();
-            }
-            if (session === null) {
-                return new Exception(req.sn, -1, "SystemError").toResponse();
             }
             const service = this.services.get(`${req.aid}/${req.cmd}`);
             if (!service) {

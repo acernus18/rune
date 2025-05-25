@@ -14,7 +14,7 @@ export declare namespace Rune {
     }
     interface RequestContext {
         sn: string;
-        session: SessionProtocol;
+        session: SessionProtocol | null;
         request: RequestProtocol;
     }
     interface ResponseProtocol {
@@ -37,7 +37,7 @@ export declare namespace Rune {
     class ServiceProvider {
         private readonly services;
         private readonly sessionProvider;
-        constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>);
+        constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>, services?: Map<string, Service>);
         proceed(req: RequestProtocol): Promise<ResponseProtocol>;
     }
     function getSerialNumber(uid: string): string;

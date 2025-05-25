@@ -32,8 +32,8 @@ export var Rune;
     }
     Rune.Exception = Exception;
     class ServiceProvider {
-        constructor(sessionProvider) {
-            this.services = new Map();
+        constructor(sessionProvider, services) {
+            this.services = services !== null && services !== void 0 ? services : new Map();
             this.sessionProvider = sessionProvider;
         }
         proceed(req) {
@@ -41,9 +41,6 @@ export var Rune;
                 const [session, err] = yield this.sessionProvider(req.sid);
                 if (err !== null) {
                     return err.toResponse();
-                }
-                if (session === null) {
-                    return new Exception(req.sn, -1, "SystemError").toResponse();
                 }
                 const service = this.services.get(`${req.aid}/${req.cmd}`);
                 if (!service) {
