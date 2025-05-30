@@ -32,13 +32,13 @@ export var Rune;
     }
     Rune.Exception = Exception;
     class ServiceProvider {
-        constructor(sessionProvider, services) {
-            this.services = services !== null && services !== void 0 ? services : new Map();
+        constructor(services, sessionProvider) {
+            this.services = services;
             this.sessionProvider = sessionProvider;
         }
         proceed(req) {
             return __awaiter(this, void 0, void 0, function* () {
-                const [session, err] = yield this.sessionProvider(req.sid);
+                const [session, err] = this.sessionProvider ? yield this.sessionProvider(req.sid) : [null, null];
                 if (err !== null) {
                     return err.toResponse();
                 }

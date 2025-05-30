@@ -64,15 +64,15 @@ export namespace Rune {
 
     export class ServiceProvider {
         private readonly services: Map<string, Service>;
-        private readonly sessionProvider: (sid: string) => AsyncResult<SessionProtocol>;
+        private readonly sessionProvider?: (sid: string) => AsyncResult<SessionProtocol>;
 
-        public constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>, services?: Map<string, Service>) {
-            this.services = services ?? new Map<string, Service>();
+        public constructor(services: Map<string, Service>, sessionProvider?: (sid: string) => AsyncResult<SessionProtocol>) {
+            this.services = services;
             this.sessionProvider = sessionProvider;
         }
 
         public async proceed(req: RequestProtocol): Promise<ResponseProtocol> {
-            const [session, err] = await this.sessionProvider(req.sid);
+            const [session, err] = this.sessionProvider ? await this.sessionProvider(req.sid) : [null, null];
             if (err !== null) {
                 return err.toResponse();
             }

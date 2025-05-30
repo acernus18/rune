@@ -36,8 +36,8 @@ export declare namespace Rune {
     type Service = (context: RequestContext) => AsyncResult<any>;
     class ServiceProvider {
         private readonly services;
-        private readonly sessionProvider;
-        constructor(sessionProvider: (sid: string) => AsyncResult<SessionProtocol>, services?: Map<string, Service>);
+        private readonly sessionProvider?;
+        constructor(services: Map<string, Service>, sessionProvider?: (sid: string) => AsyncResult<SessionProtocol>);
         proceed(req: RequestProtocol): Promise<ResponseProtocol>;
     }
     function getSerialNumber(uid: string): string;
